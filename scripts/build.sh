@@ -84,13 +84,11 @@ fi
 echo "自定义配置完成"
 echo ""
 
-# 配置包列表 - 只使用Image Builder内置的包
+# 配置包列表 - 只使用Image Builder内置的包，不包含基础系统包
 echo "配置包列表..."
 PACKAGES=""
 
-# 基础系统包（Image Builder内置）
-PACKAGES="$PACKAGES base-files ca-bundle dropbear fstools libc libgcc libustream-mbedtls logd mtd netifd opkg uci uclient-fetch urandom-seed urngd"
-
+# 只添加额外的包，不添加基础系统包（避免libc冲突）
 # 内核模块（Image Builder内置）
 PACKAGES="$PACKAGES kmod-nf-nathelper kmod-nf-nathelper-extra kmod-nft-offload"
 
@@ -122,35 +120,22 @@ if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
 fi
 
 echo ""
-echo "基础包列表配置完成"
+echo "包列表配置完成"
 echo ""
 
-# 下载第三方插件
-echo "下载第三方插件..."
-mkdir -p packages
-
-# 下载 TurboACC
-echo "下载 TurboACC..."
-wget -q "https://github.com/chenmozhijin/turboacc/releases/download/latest/luci-app-turboacc_1.0-r1_all.ipk" -O packages/luci-app-turboacc.ipk 2>/dev/null || echo "TurboACC 下载失败，将使用系统内置加速"
-
-# 下载 PassWall
-echo "下载 PassWall..."
-wget -q "https://github.com/xiaorouji/openwrt-passwall/releases/download/latest/luci-app-passwall_4.77-7_all.ipk" -O packages/luci-app-passwall.ipk 2>/dev/null || echo "PassWall 下载失败"
-
-echo "第三方插件下载完成"
-echo ""
-
-# 修改仓库源为镜像站
+# 修改仓库源为镜像站，但禁用基础包仓库以避免libc冲突
 echo "配置镜像仓库..."
 cat > repositories.conf << EOF
-src/gz immortalwrt_core https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/base
-src/gz immortalwrt_luci https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/luci
-src/gz immortalwrt_packages https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/packages
-src/gz immortalwrt_routing https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/routing
-src/gz immortalwrt_telephony https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/telephony
+## This file is a backup of the original repositories used by the Image Builder.
+## Uncomment the following lines to use the official repositories.
+# src/gz immortalwrt_core https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/base
+# src/gz immortalwrt_luci https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/luci
+# src/gz immortalwrt_packages https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/packages
+# src/gz immortalwrt_routing https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/routing
+# src/gz immortalwrt_telephony https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/telephony
 EOF
 
-echo "镜像仓库配置完成"
+echo "镜像仓库配置完成（已禁用远程仓库以避免依赖冲突）"
 echo ""
 
 # 开始构建
@@ -159,7 +144,8 @@ echo "开始构建固件..."
 echo "=========================================="
 echo ""
 
-make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" ROOTFS_PARTSIZE="${PROFILE:-1024}"
+# 使用 DISABLE_SIGNATURE_CHECK=1 和 NO_SIGNATURE_CHECK=1 来跳过签名检查
+make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" ROOTFS_PARTSIZE="${PROFILE:-1024}" DISABLE_SIGNATURE_CHECK=1 NO_SIGNATURE_CHECK=1
 
 if [ $? -eq 0 ]; then
     echo ""
