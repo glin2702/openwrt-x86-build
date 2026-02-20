@@ -11,8 +11,8 @@ echo "管理地址: ${ROUTER_IP:-192.168.1.1}"
 echo "PPPoE拨号: ${ENABLE_PPPOE:-no}"
 echo ""
 
-# 创建工作目录
-WORK_DIR="/home/build/immortalwrt"
+# 创建工作目录（使用当前目录，避免权限问题）
+WORK_DIR="$(pwd)/build_dir"
 mkdir -p "$WORK_DIR"
 cd "$WORK_DIR"
 
