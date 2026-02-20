@@ -1,9 +1,9 @@
 name: Build OpenWRT for X86 (generic-squashfs-combined-efi)
 
 on:
-  workflow_dispatch:  # 手动触发编译
+  workflow_dispatch:
   schedule:
-    - cron: 0 8 * * 5  # 每周五8点自动编译（可选）
+    - cron: 0 8 * * 5
 
 env:
   REPO_URL: https://github.com/coolsnowwolf/lede
@@ -15,7 +15,7 @@ env:
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-  FIRMWARE_FORMAT: generic-squashfs-combined-efi  # 定义目标固件格式
+  FIRMWARE_FORMAT: generic-squashfs-combined-efi
 
 jobs:
   build:
@@ -39,7 +39,6 @@ jobs:
           qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
         sudo apt autoremove -y && sudo apt clean -y
         sudo timedatectl set-timezone "$TZ"
-        echo "Deleting files, please wait..."
         sudo rm -rf /usr/share/miniconda /usr/local/lib/android /opt/ghc
         sudo -E apt-get -y autoremove --purge
         sudo -E apt-get -y clean
@@ -49,6 +48,15 @@ jobs:
       run: |
         git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
         cd openwrt
+
+    - name: Clean old feeds (关键修复)
+      run: |
+        cd openwrt
+        # 彻底删除所有 PassWall 相关 feeds 缓存
+        rm -rf feeds/passwall feeds/passwall2 feeds/small feeds/small8
+        # 清空 feeds.conf.default 中的无效引用
+        sed -i '/passwall/d' feeds.conf.default
+        sed -i '/small/d' feeds.conf.default
 
     - name: Load custom feeds and packages
       run: |
@@ -86,29 +94,19 @@ jobs:
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-    - name: Upload bin directory
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
-      uses: actions/upload-artifact@main
-      with:
-        name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: openwrt/bin
-
     - name: Organize files (only keep generic-squashfs-combined-efi.img.gz)
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && steps.compile.outputs.status == 'success'
       run: |
         cd openwrt/bin/targets/*/*
-        # 只保留 generic-squashfs-combined-efi.img.gz，删除所有其他文件
         rm -rf !(*generic-squashfs-combined-efi.img.gz) packages
-        # 检查目标文件是否存在
         if [ -f *${{ env.FIRMWARE_FORMAT }}.img.gz ]; then
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
-          # 重命名为更易识别的名称（保留核心格式标识）
           mv *${{ env.FIRMWARE_FORMAT }}.img.gz OpenWrt-X86_64-${{ env.FIRMWARE_FORMAT }}-${{ env.FILE_DATE }}.img.gz
         else
           echo "Error: No ${{ env.FIRMWARE_FORMAT }}.img.gz file found!"
-          ls -l  # 列出所有文件，方便排查
+          ls -l
           exit 1
         fi
 
