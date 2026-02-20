@@ -1,0 +1,111 @@
+name: Build ImmortalWrt X86-64
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: '固件大小 (MB)'
+        required: true
+        default: '1024'
+        type: string
+      include_docker:
+        description: '包含 Docker'
+        required: true
+        default: 'yes'
+        type: choice
+        options:
+          - 'yes'
+          - 'no'
+      router_ip:
+        description: '路由器管理地址'
+        required: true
+        default: '192.168.1.1'
+        type: string
+      enable_pppoe:
+        description: '启用PPPoE拨号'
+        required: true
+        default: 'no'
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+      pppoe_account:
+        description: 'PPPoE账号（如启用拨号）'
+        required: false
+        type: string
+      pppoe_password:
+        description: 'PPPoE密码（如启用拨号）'
+        required: false
+        type: string
+      ib_version:
+        description: 'ImmortalWrt 版本'
+        required: true
+        default: '24.10.3'
+        type: choice
+        options:
+          - '24.10.3'
+          - '24.10.2'
+          - '24.10.1'
+          - '24.10.0'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential libncurses5-dev libncursesw5-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip python3 python3-distutils zstd
+
+    - name: Build firmware
+      env:
+        PROFILE: ${{ github.event.inputs.profile }}
+        INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
+        ROUTER_IP: ${{ github.event.inputs.router_ip }}
+        IB_VERSION: ${{ github.event.inputs.ib_version }}
+        ENABLE_PPPOE: ${{ github.event.inputs.enable_pppoe }}
+        PPPOE_ACCOUNT: ${{ github.event.inputs.pppoe_account }}
+        PPPOE_PASSWORD: ${{ github.event.inputs.pppoe_password }}
+      run: |
+        chmod +x scripts/build.sh
+        ./scripts/build.sh
+
+    - name: Upload firmware to release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: x86-64-${{ github.run_number }}
+        name: ImmortalWrt X86-64 纯净版 ${{ github.event.inputs.ib_version }}
+        body: |
+          ## ImmortalWrt X86-64 纯净版固件
+          
+          ### 构建信息
+          - **版本**: ${{ github.event.inputs.ib_version }}
+          - **固件大小**: ${{ github.event.inputs.profile }} MB
+          - **包含 Docker**: ${{ github.event.inputs.include_docker }}
+          - **管理地址**: ${{ github.event.inputs.router_ip }}
+          - **PPPoE拨号**: ${{ github.event.inputs.enable_pppoe }}
+          
+          ### 包含的插件
+          - TurboACC - 网络加速器
+          - PassWall - 代理工具
+          - ttyd - Web 终端
+          - luci-theme-argon - Argon 主题
+          - Docker - 容器支持（可选）
+          
+          ### 默认登录信息
+          - **后台地址**: ${{ github.event.inputs.router_ip }}
+          - **用户名**: root
+          - **密码**: 无（首次登录无需密码）
+          
+          ### 固件文件
+          - `immortalwrt-x86-64-generic-squashfs-combined-efi.img.gz` - EFI 启动镜像（推荐）
+          - `immortalwrt-x86-64-generic-squashfs-combined.img.gz` - 传统 BIOS 启动镜像
+        files: |
+          bin/targets/x86/64/*squashfs-combined*.img.gz
+          bin/targets/x86/64/*squashfs-combined*.iso
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
