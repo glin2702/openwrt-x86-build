@@ -59,20 +59,20 @@ jobs:
         run: |
           mkdir -p build_dir
           cd build_dir
-          wget -q --show-progress "https://dl.openwrt.ai/releases/25.12/targets/x86/64/6.12.66/openwrt-imagebuilder-x86-64.Linux-x86_64.tar.zst" -O imagebuilder.tar.zst
+          wget -q --show-progress "https://dl.openwrt.ai/releases/24.10/targets/x86/64/kwrt-imagebuilder-x86-64.Linux-x86_64.tar.zst" -O imagebuilder.tar.zst
           tar -xf imagebuilder.tar.zst --strip-components=1
           rm imagebuilder.tar.zst
 
       - name: Configure repositories
         run: |
           cd build_dir
-          echo "src/gz kwrt_core https://dl.openwrt.ai/releases/25.12/targets/x86/64/6.12.66" > repositories.conf
-          echo "src/gz kwrt_base https://dl.openwrt.ai/releases/25.12/packages/x86_64/base" >> repositories.conf
-          echo "src/gz kwrt_packages https://dl.openwrt.ai/releases/25.12/packages/x86_64/packages" >> repositories.conf
-          echo "src/gz kwrt_luci https://dl.openwrt.ai/releases/25.12/packages/x86_64/luci" >> repositories.conf
-          echo "src/gz kwrt_routing https://dl.openwrt.ai/releases/25.12/packages/x86_64/routing" >> repositories.conf
-          echo "src/gz kwrt_video https://dl.openwrt.ai/releases/25.12/packages/x86_64/video" >> repositories.conf
-          echo "src/gz kwrt_kiddin9 https://dl.openwrt.ai/releases/25.12/packages/x86_64/kiddin9" >> repositories.conf
+          echo "src/gz kwrt_core https://dl.openwrt.ai/releases/24.10/targets/x86/64" > repositories.conf
+          echo "src/gz kwrt_base https://dl.openwrt.ai/releases/24.10/packages/x86_64/base" >> repositories.conf
+          echo "src/gz kwrt_packages https://dl.openwrt.ai/releases/24.10/packages/x86_64/packages" >> repositories.conf
+          echo "src/gz kwrt_luci https://dl.openwrt.ai/releases/24.10/packages/x86_64/luci" >> repositories.conf
+          echo "src/gz kwrt_routing https://dl.openwrt.ai/releases/24.10/packages/x86_64/routing" >> repositories.conf
+          echo "src/gz kwrt_video https://dl.openwrt.ai/releases/24.10/packages/x86_64/video" >> repositories.conf
+          echo "src/gz kwrt_kiddin9 https://dl.openwrt.ai/releases/24.10/packages/x86_64/kiddin9" >> repositories.conf
 
       - name: Create custom configuration
         run: |
