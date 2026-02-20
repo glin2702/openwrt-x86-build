@@ -28,6 +28,13 @@ rm imagebuilder.tar.zst
 echo "Image Builder 准备完成"
 echo ""
 
+# 备份并清空仓库配置文件，强制使用本地包
+echo "禁用远程仓库..."
+if [ -f repositories.conf ]; then
+    mv repositories.conf repositories.conf.bak
+fi
+echo "" > repositories.conf
+
 # 创建自定义配置目录
 mkdir -p files/etc/config
 mkdir -p files/etc/uci-defaults
@@ -84,58 +91,28 @@ fi
 echo "自定义配置完成"
 echo ""
 
-# 配置包列表 - 只使用Image Builder内置的包，不包含基础系统包
+# 配置包列表 - 使用 Image Builder 内置包
 echo "配置包列表..."
 PACKAGES=""
 
-# 只添加额外的包，不添加基础系统包（避免libc冲突）
-# 内核模块（Image Builder内置）
-PACKAGES="$PACKAGES kmod-nf-nathelper kmod-nf-nathelper-extra kmod-nft-offload"
-
-# 网络驱动（Image Builder内置）
-PACKAGES="$PACKAGES kmod-8139cp kmod-8139too kmod-amazon-ena kmod-amd-xgbe kmod-bnx2 kmod-button-hotplug kmod-e1000 kmod-e1000e kmod-forcedeth kmod-i40e kmod-igb kmod-igbvf kmod-igc kmod-ixgbe kmod-ixgbevf kmod-pcnet32 kmod-r8101 kmod-r8125 kmod-r8126 kmod-r8168 kmod-tg3 kmod-tulip kmod-usb-hid kmod-usb-net kmod-usb-net-asix kmod-usb-net-asix-ax88179 kmod-usb-net-rtl8150 kmod-usb-net-rtl8152-vendor kmod-vmxnet3"
-
-# 文件系统支持（Image Builder内置）
-PACKAGES="$PACKAGES kmod-fs-ext4 kmod-fs-f2fs kmod-fs-vfat block-mount e2fsprogs mkf2fs"
-
-# 基础工具（Image Builder内置）
-PACKAGES="$PACKAGES curl wget htop nano vim"
-
-# LuCI 基础（Image Builder内置）
-PACKAGES="$PACKAGES luci luci-base luci-compat luci-lib-base luci-lib-ipkg luci-light"
-
-# 中文语言包（Image Builder内置）
+# 只添加明确需要的额外包，避免基础包冲突
+# 中文支持
 PACKAGES="$PACKAGES luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn"
 
-# 主题（Image Builder内置）
-PACKAGES="$PACKAGES luci-theme-argon luci-theme-bootstrap"
+# 主题
+PACKAGES="$PACKAGES luci-theme-argon"
 
-# 基础应用（Image Builder内置）
+# 应用
 PACKAGES="$PACKAGES luci-i18n-ttyd-zh-cn"
 
-# Docker（可选，Image Builder内置）
+# Docker（可选）
 if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
     PACKAGES="$PACKAGES luci-app-docker luci-i18n-dockerman-zh-cn docker dockerd docker-compose"
     echo "已添加 Docker 支持"
 fi
 
 echo ""
-echo "包列表配置完成"
-echo ""
-
-# 修改仓库源为镜像站，但禁用基础包仓库以避免libc冲突
-echo "配置镜像仓库..."
-cat > repositories.conf << EOF
-## This file is a backup of the original repositories used by the Image Builder.
-## Uncomment the following lines to use the official repositories.
-# src/gz immortalwrt_core https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/base
-# src/gz immortalwrt_luci https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/luci
-# src/gz immortalwrt_packages https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/packages
-# src/gz immortalwrt_routing https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/routing
-# src/gz immortalwrt_telephony https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/telephony
-EOF
-
-echo "镜像仓库配置完成（已禁用远程仓库以避免依赖冲突）"
+echo "包列表: $PACKAGES"
 echo ""
 
 # 开始构建
@@ -144,8 +121,15 @@ echo "开始构建固件..."
 echo "=========================================="
 echo ""
 
-# 使用 DISABLE_SIGNATURE_CHECK=1 和 NO_SIGNATURE_CHECK=1 来跳过签名检查
-make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" ROOTFS_PARTSIZE="${PROFILE:-1024}" DISABLE_SIGNATURE_CHECK=1 NO_SIGNATURE_CHECK=1
+# 使用 make 构建，不指定 PACKAGES，让 Image Builder 使用默认包
+# 然后通过 FILES 添加自定义配置
+if [ -z "$PACKAGES" ]; then
+    # 如果没有额外包，只使用默认包
+    make image PROFILE="generic" FILES="files" ROOTFS_PARTSIZE="${PROFILE:-1024}"
+else
+    # 有额外包时，使用 PACKAGE_PACKAGES 变量
+    make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" ROOTFS_PARTSIZE="${PROFILE:-1024}"
+fi
 
 if [ $? -eq 0 ]; then
     echo ""
