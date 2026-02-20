@@ -22,11 +22,16 @@ CONFIG_PACKAGE_luci-app-docker=y
 CONFIG_PACKAGE_docker-ce=y
 CONFIG_PACKAGE_dockerd=y
 
-# PassWall 相关
+# PassWall 核心插件（本地package目录，无需feeds）
 CONFIG_PACKAGE_luci-app-passwall=y
 CONFIG_PACKAGE_luci-app-passwall2=y
 CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y
 CONFIG_PACKAGE_luci-i18n-passwall2-zh-cn=y
+
+# PassWall 依赖
+CONFIG_PACKAGE_v2ray-geodata=y
+CONFIG_PACKAGE_xray-core=y
+CONFIG_PACKAGE_v2ray-core=y
 
 # Turbo ACC 依赖
 CONFIG_PACKAGE_dnsforwarder=y
