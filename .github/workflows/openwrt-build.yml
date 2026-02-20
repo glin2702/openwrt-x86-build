@@ -44,6 +44,22 @@ jobs:
         sudo -E apt-get -y clean
         sudo ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
+    # ========== 新增：核心缓存步骤 ==========
+    - name: Cache OpenWRT build files
+      uses: actions/cache@v4
+      id: build-cache
+      with:
+        path: |
+          openwrt/dl
+          openwrt/staging_dir
+          openwrt/build_dir
+          openwrt/feeds
+          openwrt/tmp
+        key: ${{ runner.os }}-openwrt-${{ env.REPO_BRANCH }}-${{ hashFiles('openwrt/.config', 'diy-part1.sh', 'diy-part2.sh') }}
+        restore-keys: |
+          ${{ runner.os }}-openwrt-${{ env.REPO_BRANCH }}-
+          ${{ runner.os }}-openwrt-
+
     - name: Clone source code
       run: |
         git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
