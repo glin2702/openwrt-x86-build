@@ -46,138 +46,139 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
-    
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Initialization environment
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential libncurses5-dev libncursesw5-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip python3 zstd
+      - name: Initialization environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libncurses5-dev libncursesw5-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip python3 zstd
 
-    - name: Download Image Builder
-      run: |
-        mkdir -p build_dir
-        cd build_dir
-        wget -q --show-progress "https://dl.openwrt.ai/releases/25.12/targets/x86/64/6.12.66/openwrt-imagebuilder-x86-64.Linux-x86_64.tar.zst" -O imagebuilder.tar.zst
-        tar -xf imagebuilder.tar.zst --strip-components=1
-        rm imagebuilder.tar.zst
+      - name: Download Image Builder
+        run: |
+          mkdir -p build_dir
+          cd build_dir
+          wget -q --show-progress "https://dl.openwrt.ai/releases/25.12/targets/x86/64/6.12.66/openwrt-imagebuilder-x86-64.Linux-x86_64.tar.zst" -O imagebuilder.tar.zst
+          tar -xf imagebuilder.tar.zst --strip-components=1
+          rm imagebuilder.tar.zst
 
-    - name: Configure repositories
-      run: |
-        cd build_dir
-        cat > repositories.conf << 'EOF'
-src/gz kwrt_core https://dl.openwrt.ai/releases/25.12/targets/x86/64/6.12.66
-src/gz kwrt_base https://dl.openwrt.ai/releases/25.12/packages/x86_64/base
-src/gz kwrt_packages https://dl.openwrt.ai/releases/25.12/packages/x86_64/packages
-src/gz kwrt_luci https://dl.openwrt.ai/releases/25.12/packages/x86_64/luci
-src/gz kwrt_routing https://dl.openwrt.ai/releases/25.12/packages/x86_64/routing
-src/gz kwrt_video https://dl.openwrt.ai/releases/25.12/packages/x86_64/video
-src/gz kwrt_kiddin9 https://dl.openwrt.ai/releases/25.12/packages/x86_64/kiddin9
-EOF
+      - name: Configure repositories
+        run: |
+          cd build_dir
+          cat > repositories.conf << 'REPOEOF'
+          src/gz kwrt_core https://dl.openwrt.ai/releases/25.12/targets/x86/64/6.12.66
+          src/gz kwrt_base https://dl.openwrt.ai/releases/25.12/packages/x86_64/base
+          src/gz kwrt_packages https://dl.openwrt.ai/releases/25.12/packages/x86_64/packages
+          src/gz kwrt_luci https://dl.openwrt.ai/releases/25.12/packages/x86_64/luci
+          src/gz kwrt_routing https://dl.openwrt.ai/releases/25.12/packages/x86_64/routing
+          src/gz kwrt_video https://dl.openwrt.ai/releases/25.12/packages/x86_64/video
+          src/gz kwrt_kiddin9 https://dl.openwrt.ai/releases/25.12/packages/x86_64/kiddin9
+          REPOEOF
 
-    - name: Create custom configuration
-      run: |
-        cd build_dir
-        mkdir -p files/etc/uci-defaults
-        
-        # 创建自定义配置脚本
-        cat > files/etc/uci-defaults/99-custom-settings << 'EOF'
-#!/bin/sh
-# 设置默认 IP 地址
-uci set network.lan.ipaddr='${{ github.event.inputs.router_ip }}'
-uci commit network
-
-# 设置主机名
-uci set system.@system[0].hostname='OpenWrt'
-uci commit system
-
-# 设置时区
-uci set system.@system[0].timezone='CST-8'
-uci set system.@system[0].zonename='Asia/Shanghai'
-uci commit system
-
-# 设置 Argon 为主题
-uci set luci.main.mediaurlbase='/luci-static/argon'
-uci commit luci
-
-exit 0
-EOF
-        chmod +x files/etc/uci-defaults/99-custom-settings
-
-    - name: Configure PPPoE
-      if: github.event.inputs.enable_pppoe == 'yes'
-      run: |
-        cd build_dir
-        cat > files/etc/uci-defaults/99-pppoe-settings << 'EOF'
-#!/bin/sh
-# 配置WAN口为PPPoE
-uci set network.wan.proto='pppoe'
-uci set network.wan.username='${{ github.event.inputs.pppoe_account }}'
-uci set network.wan.password='${{ github.event.inputs.pppoe_password }}'
-uci set network.wan.ipv6='auto'
-uci commit network
-
-# 重启网络
-/etc/init.d/network restart
-
-exit 0
-EOF
-        chmod +x files/etc/uci-defaults/99-pppoe-settings
-
-    - name: Build firmware
-      run: |
-        cd build_dir
-        
-        # 基础包列表
-        PACKAGES="luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn luci-theme-argon luci-i18n-ttyd-zh-cn"
-        
-        # Docker
-        if [ "${{ github.event.inputs.include_docker }}" = "yes" ]; then
-          PACKAGES="$PACKAGES luci-app-docker luci-i18n-dockerman-zh-cn docker dockerd docker-compose"
-        fi
-        
-        # 从 openwrt.ai 安装插件
-        PACKAGES="$PACKAGES luci-app-turboacc"
-        PACKAGES="$PACKAGES luci-app-passwall luci-i18n-passwall-zh-cn"
-        
-        echo "Installing packages: $PACKAGES"
-        
-        # 构建固件
-        make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" ROOTFS_PARTSIZE="${{ github.event.inputs.profile }}"
-
-    - name: Organize files
-      run: |
-        mkdir -p firmware
-        cp build_dir/bin/targets/x86/64/*-efi.img.gz firmware/ 2>/dev/null || true
-        ls -la firmware/
-
-    - name: Upload firmware to release
-      uses: softprops/action-gh-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: openwrt-x86-64-${{ github.run_number }}
-        name: OpenWrt X86-64 ${{ github.run_number }}
-        body: |
-          ## OpenWrt X86-64 固件
+      - name: Create custom configuration
+        run: |
+          cd build_dir
+          mkdir -p files/etc/uci-defaults
+          ROUTER_IP="${{ github.event.inputs.router_ip }}"
+          cat > files/etc/uci-defaults/99-custom-settings << SCRIPTEOF
+          #!/bin/sh
+          # 设置默认 IP 地址
+          uci set network.lan.ipaddr='${ROUTER_IP}'
+          uci commit network
           
-          ### 构建信息
-          - **固件大小**: ${{ github.event.inputs.profile }} MB
-          - **包含 Docker**: ${{ github.event.inputs.include_docker }}
-          - **管理地址**: ${{ github.event.inputs.router_ip }}
-          - **PPPoE拨号**: ${{ github.event.inputs.enable_pppoe }}
+          # 设置主机名
+          uci set system.@system[0].hostname='OpenWrt'
+          uci commit system
           
-          ### 包含的插件
-          - TurboACC - 网络加速器
-          - PassWall - 代理工具
-          - ttyd - Web 终端
-          - luci-theme-argon - Argon 主题
-          - Docker - 容器支持（可选）
+          # 设置时区
+          uci set system.@system[0].timezone='CST-8'
+          uci set system.@system[0].zonename='Asia/Shanghai'
+          uci commit system
           
-          ### 默认登录信息
-          - **后台地址**: ${{ github.event.inputs.router_ip }}
-          - **用户名**: root
-          - **密码**: 无（首次登录无需密码）
-        files: firmware/*
+          # 设置 Argon 为主题
+          uci set luci.main.mediaurlbase='/luci-static/argon'
+          uci commit luci
+          
+          exit 0
+          SCRIPTEOF
+          chmod +x files/etc/uci-defaults/99-custom-settings
+
+      - name: Configure PPPoE
+        if: github.event.inputs.enable_pppoe == 'yes'
+        run: |
+          cd build_dir
+          PPPOE_ACCOUNT="${{ github.event.inputs.pppoe_account }}"
+          PPPOE_PASSWORD="${{ github.event.inputs.pppoe_password }}"
+          cat > files/etc/uci-defaults/99-pppoe-settings << PPPOEEOF
+          #!/bin/sh
+          # 配置WAN口为PPPoE
+          uci set network.wan.proto='pppoe'
+          uci set network.wan.username='${PPPOE_ACCOUNT}'
+          uci set network.wan.password='${PPPOE_PASSWORD}'
+          uci set network.wan.ipv6='auto'
+          uci commit network
+          
+          # 重启网络
+          /etc/init.d/network restart
+          
+          exit 0
+          PPPOEEOF
+          chmod +x files/etc/uci-defaults/99-pppoe-settings
+
+      - name: Build firmware
+        run: |
+          cd build_dir
+          
+          # 基础包列表
+          PACKAGES="luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn luci-theme-argon luci-i18n-ttyd-zh-cn"
+          
+          # Docker
+          if [ "${{ github.event.inputs.include_docker }}" = "yes" ]; then
+            PACKAGES="$PACKAGES luci-app-docker luci-i18n-dockerman-zh-cn docker dockerd docker-compose"
+          fi
+          
+          # 从 openwrt.ai 安装插件
+          PACKAGES="$PACKAGES luci-app-turboacc"
+          PACKAGES="$PACKAGES luci-app-passwall luci-i18n-passwall-zh-cn"
+          
+          echo "Installing packages: $PACKAGES"
+          
+          # 构建固件
+          make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" ROOTFS_PARTSIZE="${{ github.event.inputs.profile }}"
+
+      - name: Organize files
+        run: |
+          mkdir -p firmware
+          cp build_dir/bin/targets/x86/64/*-efi.img.gz firmware/ 2>/dev/null || true
+          ls -la firmware/
+
+      - name: Upload firmware to release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: openwrt-x86-64-${{ github.run_number }}
+          name: OpenWrt X86-64 ${{ github.run_number }}
+          body: |
+            ## OpenWrt X86-64 固件
+            
+            ### 构建信息
+            - **固件大小**: ${{ github.event.inputs.profile }} MB
+            - **包含 Docker**: ${{ github.event.inputs.include_docker }}
+            - **管理地址**: ${{ github.event.inputs.router_ip }}
+            - **PPPoE拨号**: ${{ github.event.inputs.enable_pppoe }}
+            
+            ### 包含的插件
+            - TurboACC - 网络加速器
+            - PassWall - 代理工具
+            - ttyd - Web 终端
+            - luci-theme-argon - Argon 主题
+            - Docker - 容器支持（可选）
+            
+            ### 默认登录信息
+            - **后台地址**: ${{ github.event.inputs.router_ip }}
+            - **用户名**: root
+            - **密码**: 无（首次登录无需密码）
+          files: firmware/*
