@@ -28,47 +28,6 @@ rm imagebuilder.tar.zst
 echo "Image Builder 准备完成"
 echo ""
 
-# 配置包列表
-echo "配置包列表..."
-PACKAGES=""
-
-# 核心系统包
-PACKAGES="$PACKAGES base-files ca-bundle dropbear fstools libc libgcc libustream-openssl logd mtd netifd opkg uci uclient-fetch urandom-seed urngd"
-
-# 内核模块
-PACKAGES="$PACKAGES kmod-nf-nathelper kmod-nf-nathelper-extra kmod-nft-offload"
-
-# 网络驱动
-PACKAGES="$PACKAGES kmod-8139cp kmod-8139too kmod-amazon-ena kmod-amd-xgbe kmod-bnx2 kmod-button-hotplug kmod-e1000 kmod-e1000e kmod-forcedeth kmod-fs-vfat kmod-i40e kmod-igb kmod-igbvf kmod-igc kmod-ixgbe kmod-ixgbevf kmod-pcnet32 kmod-r8101 kmod-r8125 kmod-r8126 kmod-r8168 kmod-tg3 kmod-tulip kmod-usb-hid kmod-usb-net kmod-usb-net-asix kmod-usb-net-asix-ax88179 kmod-usb-net-rtl8150 kmod-usb-net-rtl8152-vendor kmod-vmxnet3"
-
-# 文件系统支持
-PACKAGES="$PACKAGES kmod-fs-ext4 kmod-fs-f2fs block-mount e2fsprogs mkf2fs"
-
-# 基础工具
-PACKAGES="$PACKAGES curl wget htop nano vim"
-
-# LuCI 基础
-PACKAGES="$PACKAGES luci luci-base luci-compat luci-lib-base luci-lib-ipkg luci-light"
-
-# 中文语言包
-PACKAGES="$PACKAGES luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn"
-
-# 用户指定的插件
-PACKAGES="$PACKAGES luci-theme-argon"
-PACKAGES="$PACKAGES luci-i18n-ttyd-zh-cn"
-PACKAGES="$PACKAGES luci-i18n-passwall-zh-cn"
-PACKAGES="$PACKAGES luci-app-turboacc"
-
-# Docker（可选）
-if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
-    PACKAGES="$PACKAGES luci-app-docker luci-i18n-dockerman-zh-cn docker dockerd docker-compose"
-    echo "已添加 Docker 支持"
-fi
-
-echo ""
-echo "包列表配置完成"
-echo ""
-
 # 创建自定义配置目录
 mkdir -p files/etc/config
 mkdir -p files/etc/uci-defaults
@@ -125,6 +84,62 @@ fi
 echo "自定义配置完成"
 echo ""
 
+# 配置包列表 - 只使用Image Builder内置的包
+echo "配置包列表..."
+PACKAGES=""
+
+# 基础系统包（Image Builder内置）
+PACKAGES="$PACKAGES base-files ca-bundle dropbear fstools libc libgcc libustream-mbedtls logd mtd netifd opkg uci uclient-fetch urandom-seed urngd"
+
+# 内核模块（Image Builder内置）
+PACKAGES="$PACKAGES kmod-nf-nathelper kmod-nf-nathelper-extra kmod-nft-offload"
+
+# 网络驱动（Image Builder内置）
+PACKAGES="$PACKAGES kmod-8139cp kmod-8139too kmod-amazon-ena kmod-amd-xgbe kmod-bnx2 kmod-button-hotplug kmod-e1000 kmod-e1000e kmod-forcedeth kmod-i40e kmod-igb kmod-igbvf kmod-igc kmod-ixgbe kmod-ixgbevf kmod-pcnet32 kmod-r8101 kmod-r8125 kmod-r8126 kmod-r8168 kmod-tg3 kmod-tulip kmod-usb-hid kmod-usb-net kmod-usb-net-asix kmod-usb-net-asix-ax88179 kmod-usb-net-rtl8150 kmod-usb-net-rtl8152-vendor kmod-vmxnet3"
+
+# 文件系统支持（Image Builder内置）
+PACKAGES="$PACKAGES kmod-fs-ext4 kmod-fs-f2fs kmod-fs-vfat block-mount e2fsprogs mkf2fs"
+
+# 基础工具（Image Builder内置）
+PACKAGES="$PACKAGES curl wget htop nano vim"
+
+# LuCI 基础（Image Builder内置）
+PACKAGES="$PACKAGES luci luci-base luci-compat luci-lib-base luci-lib-ipkg luci-light"
+
+# 中文语言包（Image Builder内置）
+PACKAGES="$PACKAGES luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn"
+
+# 主题（Image Builder内置）
+PACKAGES="$PACKAGES luci-theme-argon luci-theme-bootstrap"
+
+# 基础应用（Image Builder内置）
+PACKAGES="$PACKAGES luci-i18n-ttyd-zh-cn"
+
+# Docker（可选，Image Builder内置）
+if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
+    PACKAGES="$PACKAGES luci-app-docker luci-i18n-dockerman-zh-cn docker dockerd docker-compose"
+    echo "已添加 Docker 支持"
+fi
+
+echo ""
+echo "基础包列表配置完成"
+echo ""
+
+# 下载第三方插件
+echo "下载第三方插件..."
+mkdir -p packages
+
+# 下载 TurboACC
+echo "下载 TurboACC..."
+wget -q "https://github.com/chenmozhijin/turboacc/releases/download/latest/luci-app-turboacc_1.0-r1_all.ipk" -O packages/luci-app-turboacc.ipk 2>/dev/null || echo "TurboACC 下载失败，将使用系统内置加速"
+
+# 下载 PassWall
+echo "下载 PassWall..."
+wget -q "https://github.com/xiaorouji/openwrt-passwall/releases/download/latest/luci-app-passwall_4.77-7_all.ipk" -O packages/luci-app-passwall.ipk 2>/dev/null || echo "PassWall 下载失败"
+
+echo "第三方插件下载完成"
+echo ""
+
 # 修改仓库源为镜像站
 echo "配置镜像仓库..."
 cat > repositories.conf << EOF
@@ -154,7 +169,6 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "固件位置: bin/targets/x86/64/"
     ls -lh bin/targets/x86/64/*.img.gz 2>/dev/null || true
-    ls -lh bin/targets/x86/64/*.iso 2>/dev/null || true
 else
     echo ""
     echo "=========================================="
