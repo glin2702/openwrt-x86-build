@@ -73,6 +73,9 @@ jobs:
       run: |
         chmod +x scripts/build.sh
         ./scripts/build.sh
+        # 复制生成的固件到项目根目录以便上传（只保留 EFI 版本）
+        mkdir -p bin/targets/x86/64
+        cp build_dir/bin/targets/x86/64/*squashfs-combined-efi*.img.gz bin/targets/x86/64/ 2>/dev/null || true
 
     - name: Upload firmware to release
       uses: softprops/action-gh-release@v1
@@ -102,10 +105,8 @@ jobs:
           - **密码**: 无（首次登录无需密码）
           
           ### 固件文件
-          - `immortalwrt-x86-64-generic-squashfs-combined-efi.img.gz` - EFI 启动镜像（推荐）
-          - `immortalwrt-x86-64-generic-squashfs-combined.img.gz` - 传统 BIOS 启动镜像
+          - `immortalwrt-x86-64-generic-squashfs-combined-efi.img.gz` - EFI 启动镜像
         files: |
-          bin/targets/x86/64/*squashfs-combined*.img.gz
-          bin/targets/x86/64/*squashfs-combined*.iso
+          bin/targets/x86/64/*squashfs-combined-efi*.img.gz
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
