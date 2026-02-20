@@ -28,12 +28,14 @@ rm imagebuilder.tar.zst
 echo "Image Builder 准备完成"
 echo ""
 
-# 备份并清空仓库配置文件，强制使用本地包
-echo "禁用远程仓库..."
-if [ -f repositories.conf ]; then
-    mv repositories.conf repositories.conf.bak
-fi
-echo "" > repositories.conf
+# 彻底删除所有仓库配置和索引
+echo "清理仓库配置..."
+rm -f repositories.conf
+rm -rf packages
+mkdir -p packages
+
+# 创建空的仓库配置文件
+touch repositories.conf
 
 # 创建自定义配置目录
 mkdir -p files/etc/config
@@ -121,8 +123,7 @@ echo "开始构建固件..."
 echo "=========================================="
 echo ""
 
-# 使用 make 构建，不指定 PACKAGES，让 Image Builder 使用默认包
-# 然后通过 FILES 添加自定义配置
+# 构建固件
 if [ -z "$PACKAGES" ]; then
     # 如果没有额外包，只使用默认包
     make image PROFILE="generic" FILES="files" ROOTFS_PARTSIZE="${PROFILE:-1024}"
