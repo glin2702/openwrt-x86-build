@@ -48,65 +48,134 @@ on:
           - '24.10.1'
           - '24.10.0'
 
+env:
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: openwrt-24.10
+  FEEDS_CONF: feeds.conf.default
+  CONFIG_FILE: .config
+  UPLOAD_BIN_DIR: false
+  UPLOAD_FIRMWARE: true
+  UPLOAD_RELEASE: true
+  TZ: Asia/Shanghai
+
 jobs:
   build:
     runs-on: ubuntu-22.04
     
     steps:
-    - name: Checkout code
+    - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Setup environment
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential libncurses5-dev libncursesw5-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip python3 python3-distutils zstd
-
-    - name: Build firmware
+    - name: Initialization environment
       env:
-        PROFILE: ${{ github.event.inputs.profile }}
-        INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev patch python3 python2.7 unzip zlib1g-dev lib32gcc-s1 libc6-dev-i386 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler g++-multilib antlr3 gperf wget curl swig rsync
+        sudo -E apt-get -qq autoremove --purge
+        sudo -E apt-get -qq clean
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
+
+    - name: Clone source code
+      working-directory: /workdir
+      run: |
+        df -hT $PWD
+        git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: Load custom feeds
+      run: |
+        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+        chmod +x $GITHUB_WORKSPACE/scripts/*.sh
+        cd openwrt
+        $GITHUB_WORKSPACE/scripts/feed-setup.sh
+
+    - name: Update feeds
+      run: cd openwrt && ./scripts/feeds update -a
+
+    - name: Install feeds
+      run: cd openwrt && ./scripts/feeds install -a
+
+    - name: Load custom configuration
+      run: |
+        [ -e files ] && mv files openwrt/files
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        chmod +x $GITHUB_WORKSPACE/scripts/*.sh
+        cd openwrt
+        $GITHUB_WORKSPACE/scripts/config-setup.sh
+      env:
         ROUTER_IP: ${{ github.event.inputs.router_ip }}
-        IB_VERSION: ${{ github.event.inputs.ib_version }}
         ENABLE_PPPOE: ${{ github.event.inputs.enable_pppoe }}
         PPPOE_ACCOUNT: ${{ github.event.inputs.pppoe_account }}
         PPPOE_PASSWORD: ${{ github.event.inputs.pppoe_password }}
+        INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
+
+    - name: Download package
+      id: package
       run: |
-        chmod +x scripts/build.sh
-        ./scripts/build.sh
-        # 复制生成的固件到项目根目录以便上传（只保留 EFI 版本）
-        mkdir -p bin/targets/x86/64
-        cp build_dir/bin/targets/x86/64/*squashfs-combined-efi*.img.gz bin/targets/x86/64/ 2>/dev/null || true
+        cd openwrt
+        make defconfig
+        make download -j8
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: Compile the firmware
+      id: compile
+      run: |
+        cd openwrt
+        echo -e "$(nproc) thread compile"
+        make -j$(nproc) || make -j1 || make -j1 V=s
+        echo "::set-output name=status::success"
+        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+    - name: Check space usage
+      if: (!cancelled())
+      run: df -hT
+
+    - name: Upload bin directory
+      uses: actions/upload-artifact@v4
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+      with:
+        name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        path: openwrt/bin
+
+    - name: Organize files
+      id: organize
+      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      run: |
+        cd openwrt/bin/targets/*/*
+        rm -rf packages
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        echo "::set-output name=status::success"
+
+    - name: Upload firmware directory
+      uses: actions/upload-artifact@v4
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      with:
+        name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        path: ${{ env.FIRMWARE }}
+
+    - name: Generate release tag
+      id: tag
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      run: |
+        echo "::set-output name=release_tag::$(date +"%Y.%m.%d-%H%M")"
+        touch release.txt
+        [ $UPLOAD_COWTRANSFER = true ] && echo "🔗 [Cowtransfer](${{ steps.cowtransfer.outputs.url }})" >> release.txt
+        [ $UPLOAD_WETRANSFER = true ] && echo "🔗 [WeTransfer](${{ steps.wetransfer.outputs.url }})" >> release.txt
+        echo "::set-output name=status::success"
 
     - name: Upload firmware to release
       uses: softprops/action-gh-release@v1
-      with:
-        tag_name: x86-64-${{ github.run_number }}
-        name: ImmortalWrt X86-64 纯净版 ${{ github.event.inputs.ib_version }}
-        body: |
-          ## ImmortalWrt X86-64 纯净版固件
-          
-          ### 构建信息
-          - **版本**: ${{ github.event.inputs.ib_version }}
-          - **固件大小**: ${{ github.event.inputs.profile }} MB
-          - **包含 Docker**: ${{ github.event.inputs.include_docker }}
-          - **管理地址**: ${{ github.event.inputs.router_ip }}
-          - **PPPoE拨号**: ${{ github.event.inputs.enable_pppoe }}
-          
-          ### 包含的插件
-          - TurboACC - 网络加速器
-          - PassWall - 代理工具
-          - ttyd - Web 终端
-          - luci-theme-argon - Argon 主题
-          - Docker - 容器支持（可选）
-          
-          ### 默认登录信息
-          - **后台地址**: ${{ github.event.inputs.router_ip }}
-          - **用户名**: root
-          - **密码**: 无（首次登录无需密码）
-          
-          ### 固件文件
-          - `immortalwrt-x86-64-generic-squashfs-combined-efi.img.gz` - EFI 启动镜像
-        files: |
-          bin/targets/x86/64/*squashfs-combined-efi*.img.gz
+      if: steps.tag.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        body_path: release.txt
+        files: ${{ env.FIRMWARE }}/*
