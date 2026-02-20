@@ -28,15 +28,6 @@ rm imagebuilder.tar.zst
 echo "Image Builder 准备完成"
 echo ""
 
-# 彻底删除所有仓库配置和索引
-echo "清理仓库配置..."
-rm -f repositories.conf
-rm -rf packages
-mkdir -p packages
-
-# 创建空的仓库配置文件
-touch repositories.conf
-
 # 创建自定义配置目录
 mkdir -p files/etc/config
 mkdir -p files/etc/uci-defaults
@@ -93,28 +84,41 @@ fi
 echo "自定义配置完成"
 echo ""
 
-# 配置包列表 - 使用 Image Builder 内置包
-echo "配置包列表..."
-PACKAGES=""
+# 修改仓库源为镜像站
+echo "配置镜像仓库..."
+cat > repositories.conf << EOF
+src/gz immortalwrt_core https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/base
+src/gz immortalwrt_luci https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/luci
+src/gz immortalwrt_packages https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/packages
+src/gz immortalwrt_routing https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/routing
+src/gz immortalwrt_telephony https://mirrors.ustc.edu.cn/immortalwrt/releases/${IB_VERSION}/packages/x86_64/telephony
+EOF
 
-# 只添加明确需要的额外包，避免基础包冲突
+echo "镜像仓库配置完成"
+echo ""
+
+# 配置包列表
+echo "配置包列表..."
+
+# 定义要添加的包（这些包需要从仓库下载）
+EXTRA_PACKAGES=""
+
 # 中文支持
-PACKAGES="$PACKAGES luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn"
+EXTRA_PACKAGES="$EXTRA_PACKAGES luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn"
 
 # 主题
-PACKAGES="$PACKAGES luci-theme-argon"
+EXTRA_PACKAGES="$EXTRA_PACKAGES luci-theme-argon"
 
 # 应用
-PACKAGES="$PACKAGES luci-i18n-ttyd-zh-cn"
+EXTRA_PACKAGES="$EXTRA_PACKAGES luci-i18n-ttyd-zh-cn"
 
 # Docker（可选）
 if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
-    PACKAGES="$PACKAGES luci-app-docker luci-i18n-dockerman-zh-cn docker dockerd docker-compose"
+    EXTRA_PACKAGES="$EXTRA_PACKAGES luci-app-docker luci-i18n-dockerman-zh-cn docker dockerd docker-compose"
     echo "已添加 Docker 支持"
 fi
 
-echo ""
-echo "包列表: $PACKAGES"
+echo "额外包列表: $EXTRA_PACKAGES"
 echo ""
 
 # 开始构建
@@ -123,14 +127,8 @@ echo "开始构建固件..."
 echo "=========================================="
 echo ""
 
-# 构建固件
-if [ -z "$PACKAGES" ]; then
-    # 如果没有额外包，只使用默认包
-    make image PROFILE="generic" FILES="files" ROOTFS_PARTSIZE="${PROFILE:-1024}"
-else
-    # 有额外包时，使用 PACKAGE_PACKAGES 变量
-    make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" ROOTFS_PARTSIZE="${PROFILE:-1024}"
-fi
+# 构建固件 - 使用 BIN_DIR 指定输出目录
+make image PROFILE="generic" PACKAGES="$EXTRA_PACKAGES" FILES="files" ROOTFS_PARTSIZE="${PROFILE:-1024}" BIN_DIR="$(pwd)/bin/targets/x86/64"
 
 if [ $? -eq 0 ]; then
     echo ""
