@@ -66,12 +66,10 @@ jobs:
       - name: Configure repositories
         run: |
           cd build_dir
-          echo "src/gz kwrt_core https://dl.openwrt.ai/releases/24.10/targets/x86/64" > repositories.conf
-          echo "src/gz kwrt_base https://dl.openwrt.ai/releases/24.10/packages/x86_64/base" >> repositories.conf
+          echo "src/gz kwrt_base https://dl.openwrt.ai/releases/24.10/packages/x86_64/base" > repositories.conf
           echo "src/gz kwrt_packages https://dl.openwrt.ai/releases/24.10/packages/x86_64/packages" >> repositories.conf
           echo "src/gz kwrt_luci https://dl.openwrt.ai/releases/24.10/packages/x86_64/luci" >> repositories.conf
           echo "src/gz kwrt_routing https://dl.openwrt.ai/releases/24.10/packages/x86_64/routing" >> repositories.conf
-          echo "src/gz kwrt_video https://dl.openwrt.ai/releases/24.10/packages/x86_64/video" >> repositories.conf
           echo "src/gz kwrt_kiddin9 https://dl.openwrt.ai/releases/24.10/packages/x86_64/kiddin9" >> repositories.conf
 
       - name: Create custom configuration
