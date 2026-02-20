@@ -1,0 +1,8 @@
+#!/bin/sh
+# 自定义设置
+
+# 设置 Argon 为主题
+uci set luci.main.mediaurlbase='/luci-static/argon'
+uci commit luci
+
+exit 0
